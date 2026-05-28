@@ -5,10 +5,16 @@ import os
 import csv
 from normalization import normalize_landmarks
 
-# Explicitly import submodules to avoid attribute resolution issues
-import mediapipe.solutions.hands as mp_hands
-import mediapipe.solutions.drawing_utils as mp_drawing
-import mediapipe.solutions.drawing_styles as mp_drawing_styles
+# Try standard MediaPipe, fallback to custom tasks shim if solutions unavailable (e.g. Python 3.13)
+try:
+    import mediapipe.solutions.hands as mp_hands
+    import mediapipe.solutions.drawing_utils as mp_drawing
+    import mediapipe.solutions.drawing_styles as mp_drawing_styles
+    USE_SHIM = False
+except (ModuleNotFoundError, AttributeError):
+    import mediapipe_shim as mp_hands
+    from mediapipe_shim import draw_custom_landmarks as mp_drawing
+    USE_SHIM = True
 
 # Class mapping
 CLASSES = {
@@ -168,13 +174,16 @@ def main():
             hand_landmarks = results.multi_hand_landmarks[0]
             
             # Draw MediaPipe hand connection mesh beautifully
-            mp_drawing.draw_landmarks(
-                frame,
-                hand_landmarks,
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing_styles.get_default_hand_landmarks_style(),
-                mp_drawing_styles.get_default_hand_connections_style()
-            )
+            if USE_SHIM:
+                mp_drawing(frame, hand_landmarks)
+            else:
+                mp_drawing.draw_landmarks(
+                    frame,
+                    hand_landmarks,
+                    mp_hands.HAND_CONNECTIONS,
+                    mp_drawing_styles.get_default_hand_landmarks_style(),
+                    mp_drawing_styles.get_default_hand_connections_style()
+                )
             
             # Normalize landmarks using translation/scale invariant algorithm
             normalized_feats = normalize_landmarks(hand_landmarks)

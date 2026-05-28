@@ -160,3 +160,4 @@ Thumbs.db
 # Project specific data and models
 gestures_dataset.csv
 gesture_model.pkl
+*.task
