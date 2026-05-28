@@ -2,6 +2,9 @@ import os
 import cv2
 import urllib.request
 import numpy as np
+from logger import get_logger
+
+logger = get_logger("mediapipe_shim")
 
 # Standard hand landmark connections
 HAND_CONNECTIONS = [
@@ -25,8 +28,8 @@ MODEL_PATH = "hand_landmarker.task"
 def download_model_if_needed():
     """Programmatically downloads the official Google Hand Landmarker model if missing."""
     if not os.path.exists(MODEL_PATH):
-        print(f"\n[MediaPipe Shim] '{MODEL_PATH}' not found locally.")
-        print(f"Downloading pre-trained Hand Landmarker model from Google ({MODEL_URL})...")
+        logger.warning(f"'{MODEL_PATH}' not found locally.")
+        logger.info(f"Downloading pre-trained Hand Landmarker model from Google ({MODEL_URL})...")
         try:
             import ssl
             # Bypass SSL certificate verification issues common on macOS
@@ -38,9 +41,9 @@ def download_model_if_needed():
             urllib.request.install_opener(opener)
             
             urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-            print("[MediaPipe Shim] Model downloaded successfully!\n")
+            logger.info("Model downloaded successfully!")
         except Exception as e:
-            print(f"[MediaPipe Shim] Error downloading model: {e}")
+            logger.error(f"Error downloading model: {e}")
             raise e
 
 class ShimLandmark:

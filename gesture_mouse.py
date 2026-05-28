@@ -6,6 +6,9 @@ import pickle
 import time
 import argparse
 import pyautogui
+from logger import get_logger
+
+logger = get_logger("gesture_mouse")
 from collections import deque, Counter
 from normalization import normalize_landmarks
 from services import create_mouse_service
@@ -133,13 +136,13 @@ class GestureMouseController:
         
     def run(self):
         # 1. Load ML Model
-        print(f"Loading gesture classification model: {self.model_path}...")
+        logger.info(f"Loading gesture classification model: {self.model_path}...")
         with open(self.model_path, 'rb') as f:
             model = pickle.load(f)
             
         # 2. Get injected screen resolution
         screen_width, screen_height = self.mouse_service.get_screen_size()
-        print(f"Active Screen Bounds: {screen_width}x{screen_height}")
+        logger.info(f"Active Screen Bounds: {screen_width}x{screen_height}")
         
         # 3. Initialize MediaPipe Hands
         hands = mp_hands.Hands(
@@ -164,16 +167,16 @@ class GestureMouseController:
         # 7. Start Webcam
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            print("Error: Could not open webcam stream.")
+            logger.error("Could not open webcam stream.")
             return
             
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         
-        print("\n--- Hand Gesture Mouse Controller Engaged ---")
-        print("Keep your hand inside the yellow tracking frame.")
-        print("Move your index finger to track. Pinch to click or drag. Double finger to scroll.")
-        print("Move cursor to any screen corner or press 'Q' to terminate.")
+        logger.info("Hand Gesture Mouse Controller Engaged")
+        logger.info("Keep your hand inside the yellow tracking frame.")
+        logger.info("Move your index finger to track. Pinch to click or drag. Double finger to scroll.")
+        logger.info("Move cursor to any screen corner or press 'Q' to terminate.")
         
         while cap.isOpened():
             success, frame = cap.read()
@@ -287,7 +290,7 @@ class GestureMouseController:
                         self.mouse_service.move_to(screen_target_x, screen_target_y)
                         self.mouse_service.click()
                         last_click_time = current_time
-                        print("--> Click Event Triggered via MouseService")
+                        logger.info("Click Event Triggered via MouseService")
                     prev_index_tip_y = None
                     
                 elif stabilized_state == 3:  # DRAG
@@ -295,7 +298,7 @@ class GestureMouseController:
                         self.mouse_service.move_to(screen_target_x, screen_target_y)
                         self.mouse_service.press_down()
                         is_dragging = True
-                        print("--> Drag Engaged via MouseService (Mouse Down)")
+                        logger.info("Drag Engaged via MouseService (Mouse Down)")
                     else:
                         self.mouse_service.move_to(screen_target_x, screen_target_y)
                     prev_index_tip_y = None
@@ -315,7 +318,7 @@ class GestureMouseController:
                         prev_index_tip_y = raw_y
                         
             except pyautogui.FailSafeException:
-                print("\n[Safety Trigger] FailSafe activated! Mouse corner exit detected. Terminating safely.")
+                logger.warning("Safety Trigger: FailSafe activated! Mouse corner exit detected. Terminating safely.")
                 if is_dragging:
                     self.mouse_service.release_up()
                 break
@@ -334,7 +337,7 @@ class GestureMouseController:
             self.mouse_service.release_up()
         cap.release()
         cv2.destroyAllWindows()
-        print("--- Gesture Mouse System Disengaged safely. Goodbye! ---")
+        logger.info("Gesture Mouse System Disengaged safely. Goodbye!")
 
 
 def main():
@@ -350,9 +353,8 @@ def main():
     
     # 1. Verify model file exists
     if not os.path.exists(args.model):
-        print(f"\n[Error] Trained model file '{args.model}' not found!")
-        print("Please train a model using 'python train.py' before running this controller,")
-        print("or run 'python train.py --synthetic' to create a test model file.\n")
+        logger.error(f"Trained model file '{args.model}' not found!")
+        logger.info("Please train a model using 'python train.py' before running this controller, or run 'python train.py --synthetic' to create a test model file.")
         return
         
     # 2. Resolve MouseService dependency via platform detector function

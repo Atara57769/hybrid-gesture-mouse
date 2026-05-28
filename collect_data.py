@@ -4,6 +4,9 @@ import numpy as np
 import os
 import csv
 from normalization import normalize_landmarks
+from logger import get_logger
+
+logger = get_logger("collect_data")
 
 # Try standard MediaPipe, fallback to custom tasks shim if solutions unavailable (e.g. Python 3.13)
 try:
@@ -136,7 +139,7 @@ def main():
     # Open camera stream
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        print("Error: Could not access the webcam.")
+        logger.error("Could not access the webcam.")
         return
 
     # Set frame dimensions to 1280x720 (HD) for crystal clear display
@@ -146,14 +149,14 @@ def main():
     current_class = 0
     is_recording = False
     
-    print("\n--- Hand Gesture Data Collection Started ---")
-    print(f"Dataset destination: {os.path.abspath(csv_path)}")
-    print("Press Q inside the camera window to save and exit.\n")
+    logger.info("Hand Gesture Data Collection Started")
+    logger.info(f"Dataset destination: {os.path.abspath(csv_path)}")
+    logger.info("Press Q inside the camera window to save and exit.")
     
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
-            print("Ignoring empty camera frame.")
+            logger.warning("Ignoring empty camera frame.")
             continue
             
         # Flip the frame horizontally for a natural mirror-like viewing experience
@@ -211,13 +214,13 @@ def main():
             break
         elif key == ord(' '):  # Spacebar toggles recording
             is_recording = not is_recording
-            print(f"Recording state: {'ON' if is_recording else 'OFF'}")
+            logger.info(f"Recording state: {'ON' if is_recording else 'OFF'}")
         elif ord('0') <= key <= ord('4'):  # 0 to 4 sets the active class
             current_class = key - ord('0')
-            print(f"Switched active recording class to: {CLASSES[current_class].upper()} ({current_class})")
+            logger.info(f"Switched active recording class to: {CLASSES[current_class].upper()} ({current_class})")
         elif key == ord('c') or key == ord('C'):
             # Clear data for selected class
-            print(f"Clearing collected data for class {CLASSES[current_class].upper()} in this session.")
+            logger.info(f"Clearing collected data for class {CLASSES[current_class].upper()} in this session.")
             session_data = [row for row in session_data if row[0] != current_class]
             # Reload counts from CSV to show correct total
             temp_counts = load_existing_counts(csv_path)
@@ -229,7 +232,7 @@ def main():
     
     # Save session data to CSV on exit
     if session_data:
-        print(f"Saving {len(session_data)} new samples to {csv_path}...")
+        logger.info(f"Saving {len(session_data)} new samples to {csv_path}...")
         
         # Append data to the CSV file
         file_exists = os.path.exists(csv_path)
@@ -241,11 +244,11 @@ def main():
                 writer.writerow(header)
             writer.writerows(session_data)
             
-        print("Data saved successfully!")
+        logger.info("Data saved successfully!")
     else:
-        print("No new samples collected in this session.")
+        logger.info("No new samples collected in this session.")
         
-    print("Goodbye!")
+    logger.info("Goodbye!")
 
 if __name__ == "__main__":
     main()

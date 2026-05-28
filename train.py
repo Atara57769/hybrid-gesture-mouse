@@ -6,6 +6,9 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+from logger import get_logger
+
+logger = get_logger("train")
 
 # Class mapping for reporting
 CLASSES = {
@@ -21,7 +24,7 @@ def generate_synthetic_data(filepath, num_samples_per_class=100):
     Generates a synthetic, distinct dataset of normalized hand features to verify 
     the compilation, training, and loading flow without webcam recordings.
     """
-    print(f"Generating synthetic dataset at '{filepath}'...")
+    logger.info(f"Generating synthetic dataset at '{filepath}'...")
     
     np.random.seed(42)
     data = []
@@ -65,7 +68,7 @@ def generate_synthetic_data(filepath, num_samples_per_class=100):
     header = ['label'] + [f'feat_{i}' for i in range(num_features)]
     df = pd.DataFrame(data, columns=header)
     df.to_csv(filepath, index=False)
-    print(f"Synthetic dataset saved with {len(df)} samples.")
+    logger.info(f"Synthetic dataset saved with {len(df)} samples.")
 
 def train_model(csv_path, model_path):
     """
@@ -73,26 +76,25 @@ def train_model(csv_path, model_path):
     and serializes the trained model.
     """
     if not os.path.exists(csv_path):
-        print(f"\n[Error] Dataset file '{csv_path}' not found!")
-        print("Please run 'python collect_data.py' to record your custom gestures first,")
-        print("or run 'python train.py --synthetic' to create a dummy test dataset.\n")
+        logger.error(f"Dataset file '{csv_path}' not found!")
+        logger.info("Please run 'python collect_data.py' to record your custom gestures first, or run 'python train.py --synthetic' to create a dummy test dataset.")
         return False
         
-    print(f"Loading dataset from '{csv_path}'...")
+    logger.info(f"Loading dataset from '{csv_path}'...")
     df = pd.read_csv(csv_path)
     
     # Check data distribution
     class_counts = df['label'].value_counts().to_dict()
-    print("\nData distribution by class:")
+    logger.info("Data distribution by class:")
     for code, name in CLASSES.items():
         count = class_counts.get(code, 0)
-        print(f"  Class {code} ({name.upper()}): {count} samples")
+        logger.info(f"  Class {code} ({name.upper()}): {count} samples")
         
     # Check if we have enough data to split
     min_samples = min(class_counts.values()) if class_counts else 0
     if len(class_counts) < 5 or min_samples < 5:
-        print("\n[Warning] Some classes have very few samples.")
-        print("For robust classification, collect at least 50+ samples per class.")
+        logger.warning("Some classes have very few samples.")
+        logger.info("For robust classification, collect at least 50+ samples per class.")
         
     # Extract features and targets
     X = df.iloc[:, 1:].values
@@ -103,8 +105,8 @@ def train_model(csv_path, model_path):
         X, y, test_size=0.2, random_state=42, stratify=y if len(class_counts) >= 2 and min_samples >= 2 else None
     )
     
-    print(f"\nTraining set size: {X_train.shape[0]} samples")
-    print(f"Testing set size: {X_test.shape[0]} samples")
+    logger.info(f"Training set size: {X_train.shape[0]} samples")
+    logger.info(f"Testing set size: {X_test.shape[0]} samples")
     
     # Initialize Random Forest Classifier
     # High estimators + balanced class weights for stability
@@ -115,7 +117,7 @@ def train_model(csv_path, model_path):
         class_weight='balanced'
     )
     
-    print("\nTraining Random Forest model...")
+    logger.info("Training Random Forest model...")
     clf.fit(X_train, y_train)
     
     # Predict on test set
@@ -123,23 +125,21 @@ def train_model(csv_path, model_path):
     
     # Performance metrics
     accuracy = accuracy_score(y_test, y_pred)
-    print(f"\nTest Set Accuracy: {accuracy * 100:.2f}%")
+    logger.info(f"Test Set Accuracy: {accuracy * 100:.2f}%")
     
     # Classification Report
     target_names = [CLASSES[i].upper() for i in sorted(np.unique(y))]
-    print("\nClassification Report:")
-    print(classification_report(y_test, y_pred, target_names=target_names, zero_division=0))
+    logger.info(f"Classification Report:\n{classification_report(y_test, y_pred, target_names=target_names, zero_division=0)}")
     
     # Confusion Matrix
-    print("Confusion Matrix:")
-    print(confusion_matrix(y_test, y_pred))
+    logger.info(f"Confusion Matrix:\n{confusion_matrix(y_test, y_pred)}")
     
     # Serialize model using Pickle
-    print(f"\nSaving model to '{model_path}'...")
+    logger.info(f"Saving model to '{model_path}'...")
     with open(model_path, 'wb') as f:
         pickle.dump(clf, f)
         
-    print("Model training complete and serialized successfully!\n")
+    logger.info("Model training complete and serialized successfully!")
     return True
 
 if __name__ == "__main__":
