@@ -8,7 +8,7 @@ import argparse
 import pyautogui
 from collections import deque, Counter
 from normalization import normalize_landmarks
-from mouse_service import create_mouse_service
+from services import create_mouse_service
 
 # Try standard MediaPipe, fallback to custom tasks shim if solutions unavailable (e.g. Python 3.13)
 try:
@@ -355,8 +355,8 @@ def main():
         print("or run 'python train.py --synthetic' to create a test model file.\n")
         return
         
-    # 2. Resolve MouseService dependency via simple factory
-    mouse_service = MouseServiceFactory.get_service()
+    # 2. Resolve MouseService dependency via platform detector function
+    mouse_service = create_mouse_service()
     
     # 3. Instantiate and run controller (Dependency Injection)
     controller = GestureMouseController(
