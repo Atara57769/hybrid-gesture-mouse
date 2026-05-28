@@ -8,6 +8,7 @@ import argparse
 import pyautogui
 from collections import deque, Counter
 from normalization import normalize_landmarks
+from mouse_service import create_mouse_service
 
 # Try standard MediaPipe, fallback to custom tasks shim if solutions unavailable (e.g. Python 3.13)
 try:
@@ -19,10 +20,6 @@ except (ModuleNotFoundError, AttributeError):
     import mediapipe_shim as mp_hands
     from mediapipe_shim import draw_custom_landmarks as mp_drawing
     USE_SHIM = True
-
-# Disable PyAutoGUI delay for instantaneous response (60+ FPS)
-pyautogui.PAUSE = 0
-pyautogui.FAILSAFE = True  # Move mouse to any corner to abort execution
 
 # Class mapping
 CLASSES = {
@@ -72,7 +69,7 @@ def draw_futuristic_hud(frame, state, confidence, screen_x, screen_y, fps, vote_
     cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
     
     # HUD Title
-    cv2.putText(frame, "GESTURE MOUSE SYSTEM v1.0", (25, 40), 
+    cv2.putText(frame, "GESTURE MOUSE SYSTEM v1.1", (25, 40), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
     cv2.line(frame, (25, 48), (365, 48), (80, 80, 80), 1)
     
@@ -118,6 +115,228 @@ def draw_futuristic_hud(frame, state, confidence, screen_x, screen_y, fps, vote_
     cv2.putText(frame, "PUSH HAND TO SCREEN CORNER FOR EMERGENCY FAIL-SAFE", (15, height - 15), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1, cv2.LINE_AA)
 
+
+class GestureMouseController:
+    """
+    Decoupled and Dependency Injected controller that drives the real-time loop,
+    performs landmark analysis, classifies states, and delegates all OS mouse controls
+    to the injected BaseMouseService subclass.
+    """
+    def __init__(self, mouse_service, model_path, smoothing=0.25, confidence=0.75, history=7, debounce=0.4, scroll_sens=1.5):
+        self.mouse_service = mouse_service
+        self.model_path = model_path
+        self.smoothing = smoothing
+        self.confidence = confidence
+        self.history = history
+        self.debounce = debounce
+        self.scroll_sens = scroll_sens
+        
+    def run(self):
+        # 1. Load ML Model
+        print(f"Loading gesture classification model: {self.model_path}...")
+        with open(self.model_path, 'rb') as f:
+            model = pickle.load(f)
+            
+        # 2. Get injected screen resolution
+        screen_width, screen_height = self.mouse_service.get_screen_size()
+        print(f"Active Screen Bounds: {screen_width}x{screen_height}")
+        
+        # 3. Initialize MediaPipe Hands
+        hands = mp_hands.Hands(
+            static_image_mode=False,
+            max_num_hands=1,
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.7
+        )
+        
+        # 4. Slide-window voting queue
+        vote_history = deque(maxlen=self.history)
+        
+        # 5. Controller state variables
+        last_click_time = 0
+        is_dragging = False
+        prev_smoothed_x, prev_smoothed_y = self.mouse_service.get_position()
+        prev_index_tip_y = None
+        
+        # 6. FPS Tracking
+        prev_frame_time = time.time()
+        
+        # 7. Start Webcam
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            print("Error: Could not open webcam stream.")
+            return
+            
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        
+        print("\n--- Hand Gesture Mouse Controller Engaged ---")
+        print("Keep your hand inside the yellow tracking frame.")
+        print("Move your index finger to track. Pinch to click or drag. Double finger to scroll.")
+        print("Move cursor to any screen corner or press 'Q' to terminate.")
+        
+        while cap.isOpened():
+            success, frame = cap.read()
+            if not success:
+                continue
+                
+            current_time = time.time()
+            fps = 1.0 / (current_time - prev_frame_time)
+            prev_frame_time = current_time
+            
+            # Mirror BGR frame
+            frame = cv2.flip(frame, 1)
+            height, width, _ = frame.shape
+            
+            # Define Active Zone guide in pixels
+            az_x_min, az_x_max = int(width * 0.2), int(width * 0.8)
+            az_y_min, az_y_max = int(height * 0.2), int(height * 0.8)
+            
+            # RGB conversion and detection processing
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = hands.process(rgb_frame)
+            
+            predicted_state = 0
+            prediction_prob = 1.0
+            raw_x, raw_y = None, None
+            
+            if results.multi_hand_landmarks:
+                hand_landmarks = results.multi_hand_landmarks[0]
+                
+                # Draw skeleton beautifully
+                if USE_SHIM:
+                    mp_drawing(frame, hand_landmarks)
+                else:
+                    mp_drawing.draw_landmarks(
+                        frame,
+                        hand_landmarks,
+                        mp_hands.HAND_CONNECTIONS,
+                        mp_drawing_styles.get_default_hand_landmarks_style(),
+                        mp_drawing_styles.get_default_hand_connections_style()
+                    )
+                
+                # Index finger tip (8) for coordinates
+                index_tip = hand_landmarks.landmark[8]
+                raw_x = int(index_tip.x * width)
+                raw_y = int(index_tip.y * height)
+                
+                # Normalize features and predict state
+                norm_feats = normalize_landmarks(hand_landmarks)
+                if norm_feats is not None:
+                    features_array = np.array([norm_feats])
+                    probs = model.predict_proba(features_array)[0]
+                    predicted_state = int(np.argmax(probs))
+                    prediction_prob = probs[predicted_state]
+                    
+                    if prediction_prob >= self.confidence:
+                        vote_history.append(predicted_state)
+                
+                # Calculate mode state
+                stabilized_state = get_stabilized_state(vote_history)
+            else:
+                stabilized_state = 0
+                vote_history.clear()
+                prev_index_tip_y = None
+                
+            # Coordinate mapping and smoothing
+            screen_target_x, screen_target_y = prev_smoothed_x, prev_smoothed_y
+            
+            if raw_x is not None and raw_y is not None:
+                # Interpolate coordinate in Active Zone
+                x_pct = (raw_x - az_x_min) / (az_x_max - az_x_min)
+                y_pct = (raw_y - az_y_min) / (az_y_max - az_y_min)
+                
+                x_pct = max(0.0, min(1.0, x_pct))
+                y_pct = max(0.0, min(1.0, y_pct))
+                
+                target_x = int(x_pct * screen_width)
+                target_y = int(y_pct * screen_height)
+                
+                # Exponential Moving Average (EMA) smoothing
+                screen_target_x = int(self.smoothing * target_x + (1.0 - self.smoothing) * prev_smoothed_x)
+                screen_target_y = int(self.smoothing * target_y + (1.0 - self.smoothing) * prev_smoothed_y)
+                
+                prev_smoothed_x, prev_smoothed_y = screen_target_x, screen_target_y
+                
+            # --- STATE MACHINE EXECUTOR (DECOUPLED via self.mouse_service) ---
+            try:
+                # Emergency Failsafe check (for Windows, since PyAutoGUI Failsafe only runs on pyautogui)
+                # If cursor is placed at any extreme corner, raise safety shutdown exception
+                if screen_target_x == 0 or screen_target_y == 0 or screen_target_x >= screen_width - 2 or screen_target_y >= screen_height - 2:
+                    raise pyautogui.FailSafeException()
+                
+                if stabilized_state == 0:  # IDLE
+                    if is_dragging:
+                        self.mouse_service.release_up()
+                        is_dragging = False
+                    prev_index_tip_y = None
+                    
+                elif stabilized_state == 1:  # MOVE
+                    if is_dragging:
+                        self.mouse_service.release_up()
+                        is_dragging = False
+                    self.mouse_service.move_to(screen_target_x, screen_target_y)
+                    prev_index_tip_y = None
+                    
+                elif stabilized_state == 2:  # CLICK
+                    if is_dragging:
+                        self.mouse_service.release_up()
+                        is_dragging = False
+                        
+                    if current_time - last_click_time > self.debounce:
+                        self.mouse_service.move_to(screen_target_x, screen_target_y)
+                        self.mouse_service.click()
+                        last_click_time = current_time
+                        print("--> Click Event Triggered via MouseService")
+                    prev_index_tip_y = None
+                    
+                elif stabilized_state == 3:  # DRAG
+                    if not is_dragging:
+                        self.mouse_service.move_to(screen_target_x, screen_target_y)
+                        self.mouse_service.press_down()
+                        is_dragging = True
+                        print("--> Drag Engaged via MouseService (Mouse Down)")
+                    else:
+                        self.mouse_service.move_to(screen_target_x, screen_target_y)
+                    prev_index_tip_y = None
+                    
+                elif stabilized_state == 4:  # SCROLL
+                    if is_dragging:
+                        self.mouse_service.release_up()
+                        is_dragging = False
+                        
+                    if raw_y is not None:
+                        if prev_index_tip_y is not None:
+                            delta_y = raw_y - prev_index_tip_y
+                            if abs(delta_y) > 3:
+                                # Delegate scroll
+                                scroll_val = int(-delta_y * self.scroll_sens)
+                                self.mouse_service.scroll(scroll_val)
+                        prev_index_tip_y = raw_y
+                        
+            except pyautogui.FailSafeException:
+                print("\n[Safety Trigger] FailSafe activated! Mouse corner exit detected. Terminating safely.")
+                if is_dragging:
+                    self.mouse_service.release_up()
+                break
+                
+            # HUD overlay
+            draw_futuristic_hud(frame, stabilized_state, prediction_prob, screen_target_x, screen_target_y, fps, list(vote_history))
+            
+            # Show output
+            cv2.imshow("Hand Gesture Mouse - Live Controller", frame)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+                
+        # Clean resources
+        if is_dragging:
+            self.mouse_service.release_up()
+        cap.release()
+        cv2.destroyAllWindows()
+        print("--- Gesture Mouse System Disengaged safely. Goodbye! ---")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Real-Time Hand Gesture Mouse Control")
     parser.add_argument("--model", type=str, default="gesture_model.pkl", help="Path to trained model pickle")
@@ -129,235 +348,29 @@ def main():
     
     args = parser.parse_args()
     
-    # Verify model file exists
+    # 1. Verify model file exists
     if not os.path.exists(args.model):
         print(f"\n[Error] Trained model file '{args.model}' not found!")
         print("Please train a model using 'python train.py' before running this controller,")
         print("or run 'python train.py --synthetic' to create a test model file.\n")
         return
         
-    print(f"Loading gesture classification model: {args.model}...")
-    with open(args.model, 'rb') as f:
-        model = pickle.load(f)
-        
-    # Get system screen metrics
-    screen_width, screen_height = pyautogui.size()
-    print(f"Detected screen resolution: {screen_width}x{screen_height}")
+    # 2. Resolve MouseService dependency via simple factory
+    mouse_service = MouseServiceFactory.get_service()
     
-    # Initialize MediaPipe Hands
-    hands = mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=1,
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.7
+    # 3. Instantiate and run controller (Dependency Injection)
+    controller = GestureMouseController(
+        mouse_service=mouse_service,
+        model_path=args.model,
+        smoothing=args.smoothing,
+        confidence=args.confidence,
+        history=args.history,
+        debounce=args.debounce,
+        scroll_sens=args.scroll_sens
     )
     
-    # Sliding window majority voting
-    vote_history = deque(maxlen=args.history)
-    
-    # Debouncing and states
-    last_click_time = 0
-    is_dragging = False
-    prev_smoothed_x, prev_smoothed_y = pyautogui.position()
-    prev_index_tip_y = None
-    
-    # FPS measurement
-    prev_frame_time = time.time()
-    
-    # Camera capture
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Error: Could not open webcam.")
-        return
-        
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    
-    print("\n--- Hand Gesture Mouse Controller Engaged ---")
-    print("Keep your hand inside the active yellow tracking frame.")
-    print("Move your index finger to track. Pinch to click or drag. Double finger to scroll.")
-    print("Move cursor to any screen corner or press 'Q' to terminate.")
-    
-    current_state = 0 # default idle
-    
-    while cap.isOpened():
-        success, frame = cap.read()
-        if not success:
-            continue
-            
-        current_time = time.time()
-        fps = 1.0 / (current_time - prev_frame_time)
-        prev_frame_time = current_time
-        
-        # Mirror frame
-        frame = cv2.flip(frame, 1)
-        height, width, _ = frame.shape
-        
-        # Define Active Zone coordinates in pixels
-        az_x_min, az_x_max = int(width * 0.2), int(width * 0.8)
-        az_y_min, az_y_max = int(height * 0.2), int(height * 0.8)
-        
-        # RGB conversions
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = hands.process(rgb_frame)
-        
-        # Inference variables
-        predicted_state = 0
-        prediction_prob = 1.0
-        
-        raw_x, raw_y = None, None
-        
-        if results.multi_hand_landmarks:
-            hand_landmarks = results.multi_hand_landmarks[0]
-            
-            # Draw landmarks beautifully
-            if USE_SHIM:
-                mp_drawing(frame, hand_landmarks)
-            else:
-                mp_drawing.draw_landmarks(
-                    frame,
-                    hand_landmarks,
-                    mp_hands.HAND_CONNECTIONS,
-                    mp_drawing_styles.get_default_hand_landmarks_style(),
-                    mp_drawing_styles.get_default_hand_connections_style()
-                )
-            
-            # Extract Index finger tip (landmark 8) for cursor positioning
-            index_tip = hand_landmarks.landmark[8]
-            raw_x = int(index_tip.x * width)
-            raw_y = int(index_tip.y * height)
-            
-            # Perform normalized inference
-            norm_feats = normalize_landmarks(hand_landmarks)
-            if norm_feats is not None:
-                features_array = np.array([norm_feats])
-                
-                # Predict probability distribution
-                probs = model.predict_proba(features_array)[0]
-                predicted_state = int(np.argmax(probs))
-                prediction_prob = probs[predicted_state]
-                
-                # Apply confidence filter before appending to voting buffer
-                if prediction_prob >= args.confidence:
-                    vote_history.append(predicted_state)
-                else:
-                    # Fallback to last known state if unsure, or append nothing
-                    pass
-                    
-            # Compute stabilized state via majority voting
-            stabilized_state = get_stabilized_state(vote_history)
-        else:
-            # No hand detected, system falls back to idle
-            stabilized_state = 0
-            vote_history.clear()
-            prediction_prob = 1.0
-            prev_index_tip_y = None
-            
-        # Coordinates Interpolation (Active Center-Zone mapping)
-        screen_target_x, screen_target_y = prev_smoothed_x, prev_smoothed_y
-        
-        if raw_x is not None and raw_y is not None:
-            # Map [az_x_min, az_x_max] to [0, screen_width]
-            x_pct = (raw_x - az_x_min) / (az_x_max - az_x_min)
-            y_pct = (raw_y - az_y_min) / (az_y_max - az_y_min)
-            
-            # Clamping
-            x_pct = max(0.0, min(1.0, x_pct))
-            y_pct = max(0.0, min(1.0, y_pct))
-            
-            # Screen projection coordinates
-            target_x = int(x_pct * screen_width)
-            target_y = int(y_pct * screen_height)
-            
-            # EMA cursor smoothing
-            screen_target_x = int(args.smoothing * target_x + (1.0 - args.smoothing) * prev_smoothed_x)
-            screen_target_y = int(args.smoothing * target_y + (1.0 - args.smoothing) * prev_smoothed_y)
-            
-            prev_smoothed_x, prev_smoothed_y = screen_target_x, screen_target_y
-            
-        # --- STATE MACHINE EXECUTOR ---
-        try:
-            # Ensure safety corner exit can trigger without locks
-            if stabilized_state == 0:  # IDLE
-                if is_dragging:
-                    pyautogui.mouseUp()
-                    is_dragging = False
-                prev_index_tip_y = None
-                
-            elif stabilized_state == 1:  # MOVE
-                if is_dragging:
-                    pyautogui.mouseUp()
-                    is_dragging = False
-                pyautogui.moveTo(screen_target_x, screen_target_y)
-                prev_index_tip_y = None
-                
-            elif stabilized_state == 2:  # CLICK
-                if is_dragging:
-                    pyautogui.mouseUp()
-                    is_dragging = False
-                
-                # Debounce timer check
-                if current_time - last_click_time > args.debounce:
-                    # Move to location first, then click
-                    pyautogui.moveTo(screen_target_x, screen_target_y)
-                    pyautogui.click()
-                    last_click_time = current_time
-                    print("--> Click Event Triggered!")
-                prev_index_tip_y = None
-                
-            elif stabilized_state == 3:  # DRAG
-                # If drag transition just began
-                if not is_dragging:
-                    pyautogui.moveTo(screen_target_x, screen_target_y)
-                    pyautogui.mouseDown()
-                    is_dragging = True
-                    print("--> Drag Mode Engaged (Mouse Down)")
-                else:
-                    # Continuous drag tracking
-                    pyautogui.moveTo(screen_target_x, screen_target_y)
-                prev_index_tip_y = None
-                    
-            elif stabilized_state == 4:  # SCROLL
-                if is_dragging:
-                    pyautogui.mouseUp()
-                    is_dragging = False
-                    
-                # Track vertical movement of the index finger
-                if raw_y is not None:
-                    if prev_index_tip_y is not None:
-                        delta_y = raw_y - prev_index_tip_y
-                        
-                        # Apply noise dead-zone threshold of 3 pixels
-                        if abs(delta_y) > 3:
-                            # Scroll direction: index tip moves up (y decreases) -> scroll up (positive value)
-                            # MacOS scrolling behaves naturally this way
-                            scroll_val = int(-delta_y * args.scroll_sens)
-                            pyautogui.scroll(scroll_val)
-                    
-                    prev_index_tip_y = raw_y
-                    
-        except pyautogui.FailSafeException:
-            print("\n[Safety Trigger] PyAutoGUI FailSafe activated! Mouse corner exit detected. Terminating safely.")
-            if is_dragging:
-                pyautogui.mouseUp()
-            break
-            
-        # Draw glassmorphic HUD panel
-        draw_futuristic_hud(frame, stabilized_state, prediction_prob, screen_target_x, screen_target_y, fps, list(vote_history))
-        
-        # Show stream
-        cv2.imshow("Hand Gesture Mouse - Live Controller", frame)
-        
-        # Exit on 'Q'
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    controller.run()
 
-    # Clean termination
-    if is_dragging:
-        pyautogui.mouseUp()
-    cap.release()
-    cv2.destroyAllWindows()
-    print("--- Gesture Mouse System Disengaged safely. Goodbye! ---")
 
 if __name__ == "__main__":
     main()
