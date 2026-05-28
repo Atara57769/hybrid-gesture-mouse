@@ -8,7 +8,7 @@ By leveraging **Google MediaPipe** for precise hand landmark tracking, **Scikit-
 
 ## ✨ Features
 
-*   **🏆 High-Fidelity Hybrid ML Pipeline**: Couples hand landmark tracking with a custom Random Forest Classifier to distinguish five distinct postures.
+*   **🏆 High-Fidelity Hybrid ML Pipeline**: Couples hand landmark tracking with a custom Random Forest Classifier to distinguish six distinct postures.
 *   **📊 Stable Real-Time Estimation**: Integrates three layers of state stabilization:
     *   **EMA Smoothing**: Exponential Moving Average filtering for jitter-free cursor tracking.
     *   **Majority Voting**: Sliding-window queue voting over a set number of frames (`--history`).
@@ -58,7 +58,8 @@ graph TD
 | **`move` (1)** | Index finger extended, others curled | Smoothly tracks cursor positioning |
 | **`click` (2)** | Thumb and index tip pinched together | Debounced primary left click |
 | **`drag` (3)** | Thumb, index, and middle tips pinched | Activates primary mouse down to drag |
-| **`scroll` (4)** | Index and middle extended upward | Vertically scrolls screen matching finger shifts |
+| **`scroll_up` (4)** | Index, middle, and ring extended upward | Scrolls screen upward at a configured rate |
+| **`scroll_down` (5)** | Index, middle, ring, and pinky extended upward | Scrolls screen downward at a configured rate |
 
 ---
 
@@ -91,7 +92,7 @@ To capture training data matching your unique hand structure:
 python collect_data.py
 ```
 *   **Controls**:
-    *   Press numbers `[0]` through `[4]` to change the target gesture label.
+    *   Press numbers `[0]` through `[5]` to change the target gesture label.
     *   Press `[Spacebar]` to **Start / Pause** recording landmarks into the session buffer.
     *   Press `[C]` to clear recorded samples for the active gesture.
     *   Press `[Q]` to save accumulated samples to `gestures_dataset.csv` and exit safely.
@@ -130,6 +131,7 @@ Arguments:
   --history HISTORY     Queue size for majority voting filter (default: 7)
   --debounce DEBOUNCE   Cooldown in seconds to trigger subsequent clicks (default: 0.4)
   --scroll-sens SENS    Scroll vertical sensitivity multiplier (default: 1.5)
+  --scroll-step STEP    Discrete scroll step size (default: 2)
 ```
 
 ---
