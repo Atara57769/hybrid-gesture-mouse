@@ -44,11 +44,16 @@ def generate_synthetic_data(filepath, num_samples_per_class=100):
             base_vector[4*3:4*3+3] = [0.1, -0.3, 0.0]
             base_vector[8*3:8*3+3] = [0.11, -0.29, 0.0]
             base_vector[12*3:12*3+3] = [0.08, -0.28, 0.0] # other fingers also close
-        elif label == 4:  # Scroll (Index & Middle finger extended)
+        elif label == 4:  # Scroll Up (Index, Middle & Ring fingers extended)
             base_vector[8*3 + 1] = -1.0  # index up
             base_vector[12*3 + 1] = -0.9 # middle up
-            base_vector[16*3 + 1] = 0.2  # ring closed
+            base_vector[16*3 + 1] = -0.8 # ring up
             base_vector[20*3 + 1] = 0.2  # pinky closed
+        elif label == 5:  # Scroll Down (Index, Middle, Ring & Pinky fingers extended)
+            base_vector[8*3 + 1] = -1.0  # index up
+            base_vector[12*3 + 1] = -0.9 # middle up
+            base_vector[16*3 + 1] = -0.8 # ring up
+            base_vector[20*3 + 1] = -0.7 # pinky up
             
         # Generate samples by adding Gaussian noise to the base vector
         for _ in range(num_samples_per_class):
@@ -84,7 +89,7 @@ def train_model(csv_path, model_path):
         
     # Check if we have enough data to split
     min_samples = min(class_counts.values()) if class_counts else 0
-    if len(class_counts) < 5 or min_samples < 5:
+    if len(class_counts) < len(CLASSES) or min_samples < 5:
         logger.warning("Some classes have very few samples.")
         logger.info("For robust classification, collect at least 50+ samples per class.")
         

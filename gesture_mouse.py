@@ -7,7 +7,7 @@ import time
 import argparse
 import pyautogui
 from logger import get_logger
-from config import CLASSES, STATE_COLORS, MODEL_PATH, SMOOTHING, CONFIDENCE, HISTORY_SIZE, CLICK_DEBOUNCE, SCROLL_SENSITIVITY
+from config import CLASSES, STATE_COLORS, MODEL_PATH, SMOOTHING, CONFIDENCE, HISTORY_SIZE, CLICK_DEBOUNCE, SCROLL_SENSITIVITY, SCROLL_STEP
 
 logger = get_logger("gesture_mouse")
 from collections import deque, Counter
@@ -110,7 +110,7 @@ class GestureMouseController:
     performs landmark analysis, classifies states, and delegates all OS mouse controls
     to the injected BaseMouseService subclass.
     """
-    def __init__(self, mouse_service, model_path=MODEL_PATH, smoothing=SMOOTHING, confidence=CONFIDENCE, history=HISTORY_SIZE, debounce=CLICK_DEBOUNCE, scroll_sens=SCROLL_SENSITIVITY):
+    def __init__(self, mouse_service, model_path=MODEL_PATH, smoothing=SMOOTHING, confidence=CONFIDENCE, history=HISTORY_SIZE, debounce=CLICK_DEBOUNCE, scroll_sens=SCROLL_SENSITIVITY, scroll_step=SCROLL_STEP):
         self.mouse_service = mouse_service
         self.model_path = model_path
         self.smoothing = smoothing
@@ -118,6 +118,7 @@ class GestureMouseController:
         self.history = history
         self.debounce = debounce
         self.scroll_sens = scroll_sens
+        self.scroll_step = scroll_step
         
     def run(self):
         # 1. Load ML Model
@@ -160,7 +161,7 @@ class GestureMouseController:
         
         logger.info("Hand Gesture Mouse Controller Engaged")
         logger.info("Keep your hand inside the yellow tracking frame.")
-        logger.info("Move your index finger to track. Pinch to click or drag. Double finger to scroll.")
+        logger.info("Move index to track. Pinch to click/drag. Three/four fingers to scroll up/down.")
         logger.info("Move cursor to any screen corner or press 'Q' to terminate.")
         
         while cap.isOpened():
@@ -288,19 +289,23 @@ class GestureMouseController:
                         self.mouse_service.move_to(screen_target_x, screen_target_y)
                     prev_index_tip_y = None
                     
-                elif stabilized_state == 4:  # SCROLL
+                elif stabilized_state == 4:  # SCROLL_UP (discrete)
                     if is_dragging:
                         self.mouse_service.release_up()
                         is_dragging = False
-                        
-                    if raw_y is not None:
-                        if prev_index_tip_y is not None:
-                            delta_y = raw_y - prev_index_tip_y
-                            if abs(delta_y) > 3:
-                                # Delegate scroll
-                                scroll_val = int(-delta_y * self.scroll_sens)
-                                self.mouse_service.scroll(scroll_val)
-                        prev_index_tip_y = raw_y
+                    # Discrete scroll up
+                    scroll_val = int(self.scroll_step * self.scroll_sens)
+                    self.mouse_service.scroll(scroll_val)
+                    prev_index_tip_y = None
+                    
+                elif stabilized_state == 5:  # SCROLL_DOWN (discrete)
+                    if is_dragging:
+                        self.mouse_service.release_up()
+                        is_dragging = False
+                    # Discrete scroll down
+                    scroll_val = int(-self.scroll_step * self.scroll_sens)
+                    self.mouse_service.scroll(scroll_val)
+                    prev_index_tip_y = None
                         
             except pyautogui.FailSafeException:
                 logger.warning("Safety Trigger: FailSafe activated! Mouse corner exit detected. Terminating safely.")
@@ -333,6 +338,7 @@ def main():
     parser.add_argument("--history", type=int, default=HISTORY_SIZE, help="Majority voting history queue size")
     parser.add_argument("--debounce", type=float, default=CLICK_DEBOUNCE, help="Debounce cooldown for clicks in seconds")
     parser.add_argument("--scroll-sens", type=float, default=SCROLL_SENSITIVITY, help="Scroll sensitivity factor")
+    parser.add_argument("--scroll-step", type=int, default=SCROLL_STEP, help="Discrete scroll step size")
     
     args = parser.parse_args()
     
@@ -353,7 +359,8 @@ def main():
         confidence=args.confidence,
         history=args.history,
         debounce=args.debounce,
-        scroll_sens=args.scroll_sens
+        scroll_sens=args.scroll_sens,
+        scroll_step=args.scroll_step
     )
     
     controller.run()

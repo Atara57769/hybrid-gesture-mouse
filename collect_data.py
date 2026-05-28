@@ -85,7 +85,7 @@ def draw_hud(frame, current_class, is_recording, counts):
     
     cv2.putText(frame, "HOTKEYS:", (width - 280, height - 100), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 2, cv2.LINE_AA)
-    cv2.putText(frame, "[0-4] Switch gesture state", (width - 280, height - 82), 
+    cv2.putText(frame, "[0-5] Switch gesture state", (width - 280, height - 82), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
     cv2.putText(frame, "[Space] Start/Pause recording", (width - 280, height - 67), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
@@ -209,7 +209,7 @@ def main():
         elif key == ord(' '):  # Spacebar toggles recording
             is_recording = not is_recording
             logger.info(f"Recording state: {'ON' if is_recording else 'OFF'}")
-        elif ord('0') <= key <= ord('4'):  # 0 to 4 sets the active class
+        elif ord('0') <= key <= ord('5'):  # 0 to 5 sets the active class
             current_class = key - ord('0')
             logger.info(f"Switched active recording class to: {CLASSES[current_class].upper()} ({current_class})")
         elif key == ord('c') or key == ord('C'):

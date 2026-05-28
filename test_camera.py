@@ -48,7 +48,7 @@ class TestCameraAndGUI(unittest.TestCase):
         # Mock session counts and dataset write to avoid modifying files
         with patch('collect_data.load_existing_counts') as mock_counts, \
              patch('os.path.exists') as mock_exists:
-            mock_counts.return_value = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+            mock_counts.return_value = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
             mock_exists.return_value = False
             
             collect_data.main()
@@ -85,7 +85,7 @@ class TestCameraAndGUI(unittest.TestCase):
              patch('csv.writer') as mock_csv, \
              patch('builtins.open', mock_open()) as mock_file, \
              patch('os.path.exists') as mock_exists:
-            mock_counts.return_value = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+            mock_counts.return_value = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
             mock_exists.return_value = True
             
             collect_data.main()
@@ -106,7 +106,7 @@ class TestCameraAndGUI(unittest.TestCase):
         # Mock ML Model
         mock_model = MagicMock()
         # Predicting state 1 (MOVE) with 95% confidence
-        mock_model.predict_proba.return_value = [[0.01, 0.95, 0.01, 0.01, 0.02]]
+        mock_model.predict_proba.return_value = [[0.01, 0.95, 0.01, 0.01, 0.01, 0.01]]
         mock_pickle.return_value = mock_model
         
         # Mock Camera
