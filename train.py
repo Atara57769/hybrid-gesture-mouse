@@ -133,6 +133,8 @@ def train_model(csv_path, model_path):
     
     # Serialize model using Pickle
     logger.info(f"Saving model to '{model_path}'...")
+    if os.path.dirname(model_path):
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
     with open(model_path, 'wb') as f:
         pickle.dump(clf, f)
         

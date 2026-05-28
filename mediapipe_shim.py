@@ -3,6 +3,7 @@ import cv2
 import urllib.request
 import numpy as np
 from logger import get_logger
+from config import HAND_LANDMARKER_PATH
 
 logger = get_logger("mediapipe_shim")
 
@@ -23,7 +24,7 @@ HAND_CONNECTIONS = [
 ]
 
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
-MODEL_PATH = "hand_landmarker.task"
+MODEL_PATH = HAND_LANDMARKER_PATH
 
 def download_model_if_needed():
     """Programmatically downloads the official Google Hand Landmarker model if missing."""
@@ -39,6 +40,9 @@ def download_model_if_needed():
             opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
             opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
             urllib.request.install_opener(opener)
+            
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
             
             urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
             logger.info("Model downloaded successfully!")

@@ -22,7 +22,8 @@ STATE_COLORS = {
 
 # Default File Paths
 DATASET_PATH = "gestures_dataset.csv"
-MODEL_PATH = "gesture_model.pkl"
+MODEL_PATH = "models/gesture_model.pkl"
+HAND_LANDMARKER_PATH = "models/hand_landmarker.task"
 
 # Controller default parameters
 SMOOTHING = 0.25
