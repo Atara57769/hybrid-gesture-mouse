@@ -7,17 +7,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from logger import get_logger
+from config import CLASSES, DATASET_PATH, MODEL_PATH
 
 logger = get_logger("train")
-
-# Class mapping for reporting
-CLASSES = {
-    0: "idle",
-    1: "move",
-    2: "click",
-    3: "drag",
-    4: "scroll"
-}
 
 def generate_synthetic_data(filepath, num_samples_per_class=100):
     """
@@ -145,8 +137,8 @@ def train_model(csv_path, model_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Hand Gesture Recognition Model")
     parser.add_argument("--synthetic", action="store_true", help="Generate synthetic gesture data for testing")
-    parser.add_argument("--dataset", type=str, default="gestures_dataset.csv", help="Path to gestures CSV file")
-    parser.add_argument("--model", type=str, default="gesture_model.pkl", help="Path to save trained model")
+    parser.add_argument("--dataset", type=str, default=DATASET_PATH, help="Path to gestures CSV file")
+    parser.add_argument("--model", type=str, default=MODEL_PATH, help="Path to save trained model")
     
     args = parser.parse_args()
     

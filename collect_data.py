@@ -5,6 +5,7 @@ import os
 import csv
 from normalization import normalize_landmarks
 from logger import get_logger
+from config import CLASSES, DATASET_PATH
 
 logger = get_logger("collect_data")
 
@@ -19,14 +20,7 @@ except (ModuleNotFoundError, AttributeError):
     from mediapipe_shim import draw_custom_landmarks as mp_drawing
     USE_SHIM = True
 
-# Class mapping
-CLASSES = {
-    0: "idle",
-    1: "move",
-    2: "click",
-    3: "drag",
-    4: "scroll"
-}
+# (CLASSES mapping is now imported from config.py)
 
 def draw_hud(frame, current_class, is_recording, counts):
     """
@@ -120,7 +114,7 @@ def load_existing_counts(csv_path):
     return counts
 
 def main():
-    csv_path = "gestures_dataset.csv"
+    csv_path = DATASET_PATH
     
     # Load counts of already collected data
     counts = load_existing_counts(csv_path)

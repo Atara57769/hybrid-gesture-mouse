@@ -7,6 +7,7 @@ import time
 import argparse
 import pyautogui
 from logger import get_logger
+from config import CLASSES, STATE_COLORS, MODEL_PATH, SMOOTHING, CONFIDENCE, HISTORY_SIZE, CLICK_DEBOUNCE, SCROLL_SENSITIVITY
 
 logger = get_logger("gesture_mouse")
 from collections import deque, Counter
@@ -24,23 +25,7 @@ except (ModuleNotFoundError, AttributeError):
     from mediapipe_shim import draw_custom_landmarks as mp_drawing
     USE_SHIM = True
 
-# Class mapping
-CLASSES = {
-    0: "idle",
-    1: "move",
-    2: "click",
-    3: "drag",
-    4: "scroll"
-}
-
-# Color palettes for HUD
-STATE_COLORS = {
-    "idle": (128, 128, 128),     # Gray
-    "move": (0, 255, 0),         # Green
-    "click": (255, 0, 0),        # Blue (RGB coordinate is BGR in OpenCV, so actually Blue is (255,0,0) in BGR)
-    "drag": (0, 165, 255),       # Orange
-    "scroll": (0, 255, 255)      # Yellow
-}
+# (CLASSES mapping and STATE_COLORS HUD palettes are now imported from config.py)
 
 def get_stabilized_state(history_deque):
     """Returns the most frequent state in the history (majority vote)."""
@@ -125,7 +110,7 @@ class GestureMouseController:
     performs landmark analysis, classifies states, and delegates all OS mouse controls
     to the injected BaseMouseService subclass.
     """
-    def __init__(self, mouse_service, model_path, smoothing=0.25, confidence=0.75, history=7, debounce=0.4, scroll_sens=1.5):
+    def __init__(self, mouse_service, model_path=MODEL_PATH, smoothing=SMOOTHING, confidence=CONFIDENCE, history=HISTORY_SIZE, debounce=CLICK_DEBOUNCE, scroll_sens=SCROLL_SENSITIVITY):
         self.mouse_service = mouse_service
         self.model_path = model_path
         self.smoothing = smoothing
@@ -342,12 +327,12 @@ class GestureMouseController:
 
 def main():
     parser = argparse.ArgumentParser(description="Real-Time Hand Gesture Mouse Control")
-    parser.add_argument("--model", type=str, default="gesture_model.pkl", help="Path to trained model pickle")
-    parser.add_argument("--smoothing", type=float, default=0.25, help="EMA smoothing factor (0 = no update, 1 = instant)")
-    parser.add_argument("--confidence", type=float, default=0.75, help="Min probability to change states")
-    parser.add_argument("--history", type=int, default=7, help="Majority voting history queue size")
-    parser.add_argument("--debounce", type=float, default=0.4, help="Debounce cooldown for clicks in seconds")
-    parser.add_argument("--scroll-sens", type=float, default=1.5, help="Scroll sensitivity factor")
+    parser.add_argument("--model", type=str, default=MODEL_PATH, help="Path to trained model pickle")
+    parser.add_argument("--smoothing", type=float, default=SMOOTHING, help="EMA smoothing factor (0 = no update, 1 = instant)")
+    parser.add_argument("--confidence", type=float, default=CONFIDENCE, help="Min probability to change states")
+    parser.add_argument("--history", type=int, default=HISTORY_SIZE, help="Majority voting history queue size")
+    parser.add_argument("--debounce", type=float, default=CLICK_DEBOUNCE, help="Debounce cooldown for clicks in seconds")
+    parser.add_argument("--scroll-sens", type=float, default=SCROLL_SENSITIVITY, help="Scroll sensitivity factor")
     
     args = parser.parse_args()
     
