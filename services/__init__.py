@@ -2,7 +2,7 @@ import sys
 from .base import BaseMouseService
 from .mac_service import MacMouseService
 from .windows_service import WindowsMouseService
-from logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger("mouse_service")
 

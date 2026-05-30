@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import argparse
 import pandas as pd
@@ -6,8 +7,14 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
-from logger import get_logger
-from config import CLASSES, DATASET_PATH, MODEL_PATH
+
+# Dynamically append the project root directory to sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from utils.logger import get_logger
+from config.settings import CLASSES, DATASET_PATH, MODEL_PATH
 
 logger = get_logger("train")
 
@@ -61,6 +68,9 @@ def generate_synthetic_data(filepath, num_samples_per_class=100):
             sample = base_vector + noise
             data.append([label] + sample.tolist())
             
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+    
     # Write to CSV
     header = ['label'] + [f'feat_{i}' for i in range(num_features)]
     df = pd.DataFrame(data, columns=header)
@@ -74,7 +84,7 @@ def train_model(csv_path, model_path):
     """
     if not os.path.exists(csv_path):
         logger.error(f"Dataset file '{csv_path}' not found!")
-        logger.info("Please run 'python collect_data.py' to record your custom gestures first, or run 'python train.py --synthetic' to create a dummy test dataset.")
+        logger.info("Please run 'python training/collect_data.py' to record your custom gestures first, or run 'python training/train.py --synthetic' to create a dummy test dataset.")
         return False
         
     logger.info(f"Loading dataset from '{csv_path}'...")

@@ -1,4 +1,4 @@
-# Centralized configurations and constants for the Hybrid Hand Gesture Mouse system
+# Centralized configurations and constants for the Layered Hybrid Gesture Mouse
 
 # Class mapping for hand gestures (0-5)
 CLASSES = {
@@ -20,8 +20,8 @@ STATE_COLORS = {
     "scroll_down": (255, 255, 0) # Cyan
 }
 
-# Default File Paths
-DATASET_PATH = "gestures_dataset.csv"
+# Default File Paths (relative to project root)
+DATASET_PATH = "training/gestures_dataset.csv"
 MODEL_PATH = "models/gesture_model.pkl"
 HAND_LANDMARKER_PATH = "models/hand_landmarker.task"
 

@@ -16,7 +16,7 @@ def normalize_landmarks(hand_landmarks):
         
     Returns:
         A list of 63 float values representing the normalized (x, y, z) coordinates,
-        or None if land_landmarks is empty/invalid.
+        or None if hand_landmarks is empty/invalid.
     """
     if not hand_landmarks or not hasattr(hand_landmarks, 'landmark') or len(hand_landmarks.landmark) < 21:
         return None

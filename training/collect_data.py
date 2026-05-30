@@ -1,11 +1,17 @@
 import cv2
-import mediapipe as mp
 import numpy as np
 import os
 import csv
-from normalization import normalize_landmarks
-from logger import get_logger
-from config import CLASSES, DATASET_PATH
+import sys
+
+# Dynamically append the project root directory to sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from tracking.normalization import normalize_landmarks
+from utils.logger import get_logger
+from config.settings import CLASSES, DATASET_PATH
 
 logger = get_logger("collect_data")
 
@@ -16,11 +22,9 @@ try:
     import mediapipe.solutions.drawing_styles as mp_drawing_styles
     USE_SHIM = False
 except (ModuleNotFoundError, AttributeError):
-    import mediapipe_shim as mp_hands
-    from mediapipe_shim import draw_custom_landmarks as mp_drawing
+    import utils.mediapipe_shim as mp_hands
+    from utils.mediapipe_shim import draw_custom_landmarks as mp_drawing
     USE_SHIM = True
-
-# (CLASSES mapping is now imported from config.py)
 
 def draw_hud(frame, current_class, is_recording, counts):
     """
@@ -229,6 +233,7 @@ def main():
         logger.info(f"Saving {len(session_data)} new samples to {csv_path}...")
         
         # Append data to the CSV file
+        os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
         file_exists = os.path.exists(csv_path)
         with open(csv_path, 'a', newline='') as f:
             writer = csv.writer(f)

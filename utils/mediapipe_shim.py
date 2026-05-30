@@ -2,8 +2,8 @@ import os
 import cv2
 import urllib.request
 import numpy as np
-from logger import get_logger
-from config import HAND_LANDMARKER_PATH
+from utils.logger import get_logger
+from config.settings import HAND_LANDMARKER_PATH
 
 logger = get_logger("mediapipe_shim")
 
