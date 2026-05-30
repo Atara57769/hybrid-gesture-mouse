@@ -146,6 +146,7 @@ class GestureMouseController:
         is_dragging = False
         prev_smoothed_x, prev_smoothed_y = self.mouse_service.get_position()
         prev_index_tip_y = None
+        has_clicked = False
         
         # 6. FPS Tracking
         prev_frame_time = time.time()
@@ -254,6 +255,9 @@ class GestureMouseController:
                 if screen_target_x == 0 or screen_target_y == 0 or screen_target_x >= screen_width - 2 or screen_target_y >= screen_height - 2:
                     raise pyautogui.FailSafeException()
                 
+                if stabilized_state != 2:
+                    has_clicked = False
+                
                 if stabilized_state == 0:  # IDLE
                     if is_dragging:
                         self.mouse_service.release_up()
@@ -272,11 +276,13 @@ class GestureMouseController:
                         self.mouse_service.release_up()
                         is_dragging = False
                         
-                    if current_time - last_click_time > self.debounce:
-                        self.mouse_service.move_to(screen_target_x, screen_target_y)
-                        self.mouse_service.click()
-                        last_click_time = current_time
-                        logger.info("Click Event Triggered via MouseService")
+                    if not has_clicked:
+                        if current_time - last_click_time > self.debounce:
+                            self.mouse_service.move_to(screen_target_x, screen_target_y)
+                            self.mouse_service.click()
+                            last_click_time = current_time
+                            has_clicked = True
+                            logger.info("Click Event Triggered via MouseService")
                     prev_index_tip_y = None
                     
                 elif stabilized_state == 3:  # DRAG

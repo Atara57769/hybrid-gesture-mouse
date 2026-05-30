@@ -137,5 +137,45 @@ class TestCameraAndGUI(unittest.TestCase):
         # Verify that MouseService was queried and instructed
         mock_service.get_screen_size.assert_called()
         
+    @patch('cv2.VideoCapture')
+    @patch('cv2.imshow')
+    @patch('cv2.waitKey')
+    @patch('cv2.destroyAllWindows')
+    @patch('gesture_mouse.mp_hands.Hands')
+    @patch('pickle.load')
+    @patch('builtins.open', new_callable=mock_open)
+    def test_gesture_mouse_single_click_per_gesture(self, mock_file, mock_pickle, mock_hands_class, mock_destroy, mock_wait_key, mock_imshow, mock_video_capture):
+        """Tests that holding the CLICK gesture only triggers a single click until released."""
+        # Mock ML Model
+        mock_model = MagicMock()
+        # Predicting state 2 (CLICK) with 95% confidence
+        mock_model.predict_proba.return_value = [[0.01, 0.01, 0.95, 0.01, 0.01, 0.01]]
+        mock_pickle.return_value = mock_model
+        
+        # Mock Camera to run for 5 frames
+        mock_cap = MagicMock()
+        mock_cap.isOpened.side_effect = [True, True, True, True, True, False]
+        mock_cap.read.return_value = (True, np.zeros((720, 1280, 3), dtype=np.uint8))
+        mock_video_capture.return_value = mock_cap
+        
+        # Setup mock hands returns a hand landmark
+        mock_hands_instance = MagicMock()
+        mock_hands_instance.process.return_value = MockResults(has_hand=True)
+        mock_hands_class.return_value = mock_hands_instance
+        
+        mock_wait_key.return_value = ord('q')
+        
+        # Mock MouseService
+        mock_service = MagicMock()
+        mock_service.get_screen_size.return_value = (1920, 1080)
+        mock_service.get_position.return_value = (500, 500)
+        
+        from gesture_mouse import GestureMouseController
+        controller = GestureMouseController(mock_service, "gesture_model.pkl", history=1)
+        controller.run()
+        
+        # Even though the loop ran multiple times in state 2, click() should only be called once
+        mock_service.click.assert_called_once()
+        
 if __name__ == '__main__':
     unittest.main()
